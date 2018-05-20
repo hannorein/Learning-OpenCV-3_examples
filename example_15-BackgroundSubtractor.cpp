@@ -20,8 +20,7 @@ Mat theBackground; //Will hold the current background image as seen from the mod
 Ptr<BackgroundSubtractor> pMOG2; //MOG2 Background subtractor
 int keyboard; //input from keyboard
 void help();
-void processVideo(char* videoFilename, int train);
-void processImages(char* firstFrameFilename, int train);
+void processVideo(int train);
 void help()
 {
     cout
@@ -62,30 +61,20 @@ int main(int argc, char* argv[])
 
     //create Background Subtractor objects
     pMOG2 = createBackgroundSubtractorMOG2(); //MOG2 approach
-    if(strcmp(argv[2], "-vid") == 0) {
-        //input data coming from a video
-        processVideo(argv[3], number_to_train_on);
-    }
-    else if(strcmp(argv[2], "-img") == 0) {
-        //input data coming from a sequence of images
-        processImages(argv[3], number_to_train_on);
-    }
-    else {
-        //error in reading input parameters
-        cerr <<"Please, check the input parameters." << endl;
-        cerr <<"Exiting..." << endl;
-        return EXIT_FAILURE;
-    }
+    processVideo(argv[3], number_to_train_on);
     //destroy GUI windows
     destroyAllWindows();
     return EXIT_SUCCESS;
 }
-void processVideo(char* videoFilename, int train) {
+void processVideo(int train) {
     //create the capture object
-    VideoCapture capture(videoFilename);
+    VideoCapture capture;//
+    capture.open(0); 
+    capture.set(CV_CAP_PROP_FRAME_WIDTH,640);
+    capture.set(CV_CAP_PROP_FRAME_HEIGHT,480);
     if(!capture.isOpened()){
         //error in opening the video input
-        cerr << "Unable to open video file: " << videoFilename << endl;
+        cerr << "Unable to open video stream." << endl;
         exit(EXIT_FAILURE);
     }
     //read input data. ESC or 'q' for quitting
@@ -134,87 +123,9 @@ void processVideo(char* videoFilename, int train) {
 			cout << "\nHit any key to continue\n" << endl;
 			keyboard = waitKey(); //single step with keyboard press in run mode
 		} else {
-			keyboard = waitKey( 10 ); //run automatically in train mode
+			keyboard = waitKey( 1 ); //run automatically in train mode
 		}
     }
     //delete capture object
     capture.release();
-}
-void processImages(char* fistFrameFilename, int train) {
-    //read the first file of the sequence
-    frame = imread(fistFrameFilename);
-    if(frame.empty()){
-        //error in opening the first image
-        cerr << "Unable to open first image frame: " << fistFrameFilename << endl;
-        exit(EXIT_FAILURE);
-    }
-    //current image filename
-    string fn(fistFrameFilename);
-    //read input data. ESC or 'q' for quitting
-    double learning_rate = 0.1;
-    int frame_count = 0;
-    while( (char)keyboard != 'q' && (char)keyboard != 27 ){
-		
-        //update the background model
-        //
-        //NOTE: This file just demonstrates the generic methods, each class
-        //      Has specific ways of setting thresholds etc to make it work well.
-        //      You must go into the documentation (for MOG2, see classcv_1_1BackgroundSubtractorMOG2
-        //      if you want to get good results!
-        //
-         if(frame_count == train) { learning_rate = 0;} //stop learning after training
-        pMOG2->apply(frame, fgMaskMOG2, learning_rate);
-        //get the frame number and write it on the current frame
-        size_t index = fn.find_last_of("/");
-        if(index == string::npos) {
-            index = fn.find_last_of("\\");
-        }
-        size_t index2 = fn.find_last_of(".");
-        string prefix = fn.substr(0,index+1);
-        string suffix = fn.substr(index2);
-        string frameNumberString = fn.substr(index+1, index2-index-1);
-        istringstream iss(frameNumberString);
-        int frameNumber = 0;
-        iss >> frameNumber;
-        rectangle(frame, cv::Point(10, 2), cv::Point(100,20),
-                  cv::Scalar(255,255,255), -1);
-        putText(frame, frameNumberString.c_str(), cv::Point(15, 15),
-                FONT_HERSHEY_SIMPLEX, 0.5 , cv::Scalar(0,0,0));
-        //show the current frame and the fg masks
-        imshow("Frame", frame);
-        imshow("FG Mask MOG 2", fgMaskMOG2);
-        pMOG2->getBackgroundImage(theBackground); //Get an image of the model's background
-        imshow("theBackground",theBackground);
-      
-/* By uncommenting this, you can write out the mask images        
-		string imageToSave = "output_MOG_" + frameNumberString + ".png";
-		bool saved = imwrite(imageToSave, fgMaskMOG);
-		if(!saved) {
-		  cerr << "Unable to save " << imageToSave << endl;
-		}        
-*/
-        
-        //get the input from the keyboard
-        if(frame_count >= train) {
-			cout << "\nHit any key to continue\n" << endl;
-			keyboard = waitKey(); //Single step with keyboard press in test mode
-		} else {
-			keyboard = waitKey( 10 ); //Run automatically in train mode
-		}
-        frame_count += 1;
-        //search for the next image in the sequence
-        ostringstream oss;
-        oss << (frameNumber + 1);
-        string nextFrameNumberString = oss.str();
-        string nextFrameFilename = prefix + nextFrameNumberString + suffix;
-        //read the next frame
-        frame = imread(nextFrameFilename);
-        if(frame.empty()){
-            //error in opening the next image in the sequence
-            cerr << "Unable to open image frame: " << nextFrameFilename << endl;
-            exit(EXIT_FAILURE);
-        }
-        //update the path of the current frame
-        fn.assign(nextFrameFilename);
-    }
 }
