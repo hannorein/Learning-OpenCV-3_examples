@@ -26,6 +26,8 @@ Ptr<BackgroundSubtractor> pMOG2; //MOG2 Background subtractor
 long start_time = 0;
 long last_time = 0;
 long last_pos = 0;
+const int Nlog = 10;
+double last_speed[Nlog];
 
 int main(int argc, char* argv[])
 {
@@ -53,25 +55,30 @@ int main(int argc, char* argv[])
             cerr << "Unable to read next frame." << endl;
             exit(EXIT_FAILURE);
         }
+        blur( frame, frame, Size( 2, 2 ), Point(-1,-1) );
         pMOG2->apply(frame, mask, learning_rate);
-        imshow("Frame", frame);
-        imshow("Mask", mask);
         Mat sum;
         reduce(mask, sum, 0, CV_REDUCE_SUM, CV_32S);
        
-        uint32_t threshold = 5000; 
-        int min_length = 10;
+        int min_length = 20;
         int cur_pos = -1;
+        uint32_t max = 0;
         for (int i=0;i<sum.cols-min_length;i++){
-            int passed = 1;
-            for (int j=i;j<i+min_length;j++){
-                if (sum.at<uint32_t>(0,i)<threshold){
-                    passed = 0;
+            uint32_t c = sum.at<uint32_t>(0,i);
+            max = max<c?c:max;
+        }
+        if (max>10000){
+            for (int i=0;i<sum.cols-min_length;i++){
+                int passed = 1;
+                for (int j=i;j<i+min_length;j++){
+                    if (sum.at<uint32_t>(0,i)<max/4){
+                        passed = 0;
+                    }
                 }
-            }
-            if (passed){
-                cur_pos = i;
-                break;
+                if (passed){
+                    cur_pos = i;
+                    break;
+                }
             }
         }
         double speed = 0;
@@ -83,9 +90,34 @@ int main(int argc, char* argv[])
             last_time = cur_time;
             last_pos = cur_pos;
         }
-        cout << (cur_time-start_time)/1e6 << "\t" << speed  <<endl;
+        for (int i=1;i<Nlog;i++){
+            last_speed[i-1] = last_speed[i];
+        }
+        last_speed[Nlog-1] = speed;
+        double avg = 0;
+        for (int i=0;i<Nlog;i++){
+            avg+= last_speed[i];
+        }
+        avg /= (double) Nlog;
+        int consistent = 1;
+        for (int i=0;i<Nlog;i++){
+            double rel = fabs((avg- last_speed[i])/avg);
+            if (rel>1.2 || rel < 0.8){
+                consistent = 0;
+            }
+        }
 
 
+        cout << (cur_time-start_time)/1e6 << "\t" << speed << "\t" << consistent <<endl;
+
+
+        stringstream ss;
+        ss << "Speed: " << speed;
+        putText(mask, ss.str().c_str(), cvPoint(30,420), 
+                    FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200,200,250), 1, CV_AA);
+
+        imshow("Frame", frame);
+        imshow("Mask", mask);
 		keyboard = waitKey(1); 
     }
     capture.release();
